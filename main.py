@@ -58,16 +58,17 @@ db = init_firebase()
 warnings.filterwarnings("ignore", category=UserWarning)
 
 # ───────────────────────────── Firestore → KMZ helpers
-def fetch_coordinates(campana_id: str) -> List[Tuple[float, float]]:
+def fetch_coordinates(campana_id: str) -> List[Tuple[float, float, str]]:
     docs = (
         db.collection("Registro")
         .where("campanaID", "==", campana_id.strip('"'))
         .stream()
     )
-    coords: List[Tuple[float, float]] = []
+    coords: List[Tuple[float, float, str]] = []
     for d in docs:
         data = d.to_dict() or {}
         geo = data.get("Coordinates")  # C mayúscula
+        name = data.get("Name", "Sin nombre")  # 👈 campo Firestore
         try:
             lon, lat = geo.longitude, geo.latitude  # GeoPoint
         except AttributeError:
@@ -78,15 +79,16 @@ def fetch_coordinates(campana_id: str) -> List[Tuple[float, float]]:
             else:
                 continue
         if None not in (lat, lon):
-            coords.append((lon, lat))
+            coords.append((lon, lat, name))
     return coords
 
-def coords_to_kml(coords: List[Tuple[float, float]]) -> str:
+def coords_to_kml(coords: List[Tuple[float, float, str]]) -> str:
     placemarks = "\n".join(
         f"""    <Placemark>
+      <name>{name}</name>
       <Point><coordinates>{lon},{lat},0</coordinates></Point>
     </Placemark>"""
-        for lon, lat in coords
+        for lon, lat, name in coords
     )
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -95,6 +97,7 @@ def coords_to_kml(coords: List[Tuple[float, float]]) -> str:
   </Document>
 </kml>
 """
+
 
 def write_kmz_file(kml_str: str, filename: str) -> Path:
     kmz_path = DOWNLOAD_DIR / filename
@@ -141,6 +144,7 @@ def get_kmz(
     download_url = f"{base}/downloads/{quote(name)}"
 
     return JSONResponse({"download_url": download_url})
+
 
 
 
